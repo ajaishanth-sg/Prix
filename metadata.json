@@ -1,0 +1,11 @@
+{
+  "name": "Prix Private Messenger",
+  "description": "Secure end-to-end encrypted chat, voice and video calling featuring a game/news disguise mode, Google Drive storage integration, and bridge features.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

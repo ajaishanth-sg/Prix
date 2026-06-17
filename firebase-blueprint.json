@@ -1,0 +1,173 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public profile details of a secure Intergram client",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Unique user ID"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name"
+        },
+        "email": {
+          "type": "string",
+          "description": "Registered Gmail address"
+        },
+        "photoURL": {
+          "type": "string",
+          "description": "Profile picture URL"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp or server time"
+        },
+        "allowedGoogleDrive": {
+          "type": "boolean",
+          "description": "Has granted permission to connect Google Drive"
+        },
+        "allowedCamera": {
+          "type": "boolean",
+          "description": "Has granted camera permission choice"
+        },
+        "allowedAudio": {
+          "type": "boolean",
+          "description": "Has granted microphone permission choice"
+        }
+      },
+      "required": ["uid", "name", "email", "photoURL", "createdAt"]
+    },
+    "UserCredential": {
+      "title": "User Credential",
+      "description": "Private encrypted credentials store for authentication",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Registered email"
+        },
+        "passwordHash": {
+          "type": "string",
+          "description": "Symmetrically protected key/hash of the password"
+        },
+        "uid": {
+          "type": "string",
+          "description": "User profile ID"
+        }
+      },
+      "required": ["email", "passwordHash", "uid"]
+    },
+    "Connection": {
+      "title": "Connection Pair",
+      "description": "Bidirectional encrypted pairing node between direct contacts",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique pairing ID (min_max UIDs)"
+        },
+        "user1": {
+          "type": "string",
+          "description": "UID of party 1"
+        },
+        "user2": {
+          "type": "string",
+          "description": "UID of party 2"
+        },
+        "user1_name": {
+          "type": "string"
+        },
+        "user2_name": {
+          "type": "string"
+        },
+        "user1_avatar": {
+          "type": "string"
+        },
+        "user2_avatar": {
+          "type": "string"
+        },
+        "user1_email": {
+          "type": "string"
+        },
+        "user2_email": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        },
+        "lastMessage": {
+          "type": "string"
+        },
+        "lastMessageTime": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "user1", "user2", "createdAt"]
+    },
+    "Message": {
+      "title": "Connection Message",
+      "description": "End-to-end encrypted or plaintext chat message within a paired connection",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "senderId": {
+          "type": "string"
+        },
+        "senderName": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "fileId": {
+          "type": "string"
+        },
+        "fileName": {
+          "type": "string"
+        },
+        "fileType": {
+          "type": "string"
+        },
+        "fileSize": {
+          "type": "string"
+        },
+        "isEncrypted": {
+          "type": "boolean"
+        },
+        "encryptionKeyHash": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "string"
+        }
+      },
+      "required": ["id", "senderId", "senderName", "text", "timestamp", "isEncrypted"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "Users Profile collection"
+    },
+    "credentials/{email}": {
+      "schema": "UserCredential",
+      "description": "Private credentials store for security validation"
+    },
+    "connections/{connectionId}": {
+      "schema": "Connection",
+      "description": "Connected peer communications"
+    },
+    "connections/{connectionId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Nested chat messages"
+    }
+  }
+}

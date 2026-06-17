@@ -4,16 +4,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import logoImg from './logo.png';
-import DisguiseGame from './components/DisguiseGame';
-import DisguiseNews from './components/DisguiseNews';
-import SecretLockpad from './components/SecretLockpad';
-import IntergramMessenger from './components/IntergramMessenger';
-import WebRTCCalling from './components/WebRTCCalling';
-import { initAuth, logout, setAccessToken, db, safeGetDoc, waitForFirestoreReady } from './firebase';
+import AppRoutes from './routes';
+import { initAuth, logout, setAccessToken, db, safeGetDoc, waitForFirestoreReady } from './config/firebase';
 import { doc, setDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
-import { User } from 'firebase/auth';
-import { Gamepad, Newspaper, Lock, Sun, Moon, Link, Phone, PhoneOff } from 'lucide-react';
 
 type DisguiseTab = 'news' | 'game';
 
@@ -256,7 +249,6 @@ export default function App() {
 
         try {
           // Check if there's an invitation TO me from inviteUid using my email or phone
-          // Format: {senderUid}_{recipientEmailOrPhone}
           for (const contact of [myEmail, myPhone]) {
             if (!contact) continue;
             const docId = `${inviteUid}_${contact}`;
@@ -267,17 +259,14 @@ export default function App() {
             }
           }
 
-          // Also check if I (current user) have an invitation document TO this inviteUid
-          // Format: {myUid}_{inviteUid_emailOrPhone} - but we check reverse direction
+          // Also check reverse direction
           if (!hasPermission) {
             const myContacts = [myEmail, myPhone].filter(Boolean);
             for (const myContact of myContacts) {
-              // Check if I invited the other user (bidirectional)
               const docId = `${userObj.uid}_${myContact}`;
               const snap = await safeGetDoc(doc(db, 'invitations', docId));
               if (snap.exists()) {
                 const inviteData = snap.data();
-                // Check if this invitation was intended for inviteUid
                 if (inviteData?.recipient === inviteUid) {
                   hasPermission = true;
                   break;
@@ -294,7 +283,6 @@ export default function App() {
           }
         } catch (dbErr) {
           console.warn('Unable to verify invitation permissions, using fallback mode:', dbErr);
-          // In fallback mode, check localStorage for stored invite
           try {
             const inviteKey = `invite_${inviteUid}`;
             const stored = localStorage.getItem(inviteKey);
@@ -308,14 +296,11 @@ export default function App() {
           } catch { }
         }
 
-        // If no permission found, allow connection anyway for testing/invite-link mode
-        // This enables users to accept invite links directly without prior invitation
         if (!hasPermission) {
           console.log('No prior invitation found, allowing direct link connection for testing');
           hasPermission = true;
         }
       } else {
-        // No Firebase - allow direct connection
         console.log('No Firebase connection, allowing direct link pairing');
       }
 
@@ -324,7 +309,6 @@ export default function App() {
       let inviteEmail = 'node@internal';
       let invitePhone = '';
 
-      // Query Firestore if available to fetch up-to-date counterpart details
       if (db) {
         try {
           const inviteUserRef = doc(db, 'users', inviteUid);
@@ -336,7 +320,6 @@ export default function App() {
             inviteEmail = inviteData.email || inviteEmail;
             invitePhone = inviteData.phoneNumber || invitePhone || '';
 
-            // Cache to local storage so other side is preserved
             localStorage.setItem(`user_${inviteUid}`, JSON.stringify(inviteData));
           }
         } catch (dbErr) {
@@ -344,7 +327,6 @@ export default function App() {
         }
       }
 
-      // Use the already fetched counterpart details from the query above (lines 286-309)
       const connectionId = [userObj.uid, inviteUid].sort().join('_');
 
       const connectionData: any = {
@@ -368,7 +350,6 @@ export default function App() {
         connectionData.user2_phoneNumber = userObj.phoneNumber;
       }
 
-      // Force absolute synchronization to local storage index for local playground testing
       localStorage.setItem(`local_conn_${connectionId}`, JSON.stringify(connectionData));
 
       if (db) {
@@ -381,12 +362,11 @@ export default function App() {
         }
       }
 
-      // Safe clean URL strip of connection parameters immediately upon pairing completion
       try {
         const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
       } catch (historyErr) {
-        console.warn('URL address purification failed:', historyErr);
+        console.warn('URL purification failed:', historyErr);
       }
       setInviteUid(null);
       setNewlyPairedChatId(connectionId);
@@ -396,7 +376,7 @@ export default function App() {
     }
   };
 
-  // Perform automatic matchmaking link synchronization once user session loads with query params active
+  // Matchmaking link sync once session loads with query params active
   useEffect(() => {
     if (currentUser && inviteUid && currentUser.uid !== inviteUid) {
       handleLinkInviteConnection(currentUser);
@@ -417,7 +397,6 @@ export default function App() {
       localStorage.setItem('gmailToken', token);
       localStorage.setItem('authType', resolvedLoginType);
 
-      // Perform automated matching if invited on launch
       if (inviteUid) {
         await handleLinkInviteConnection(user);
       }
@@ -439,7 +418,6 @@ export default function App() {
       setIsRevealed(false);
     } catch (e) {
       console.error('Logout error:', e);
-      // Fallback state reset
       localStorage.removeItem('isRevealed');
       localStorage.removeItem('currentUser');
       localStorage.removeItem('gmailToken');
@@ -499,7 +477,7 @@ export default function App() {
       const callRef = doc(db, 'calls', currentUser.uid);
       await deleteDoc(callRef);
     } catch (err) {
-      console.warn("Incoming call reject write failed:", err);
+      console.warn("Incoming call reject failed:", err);
     }
     setIncomingCall(null);
   };
@@ -507,7 +485,6 @@ export default function App() {
   const handleEndCall = async () => {
     if (db && currentUser?.uid) {
       try {
-        // Clean up calls doc for both parties in the session to keep Firestore tidy
         const candidates = [activeCall?.targetUid, activeCall?.callerUid].filter(Boolean) as string[];
         for (const uid of candidates) {
           await deleteDoc(doc(db, 'calls', uid));
@@ -521,223 +498,30 @@ export default function App() {
     setShowLockpad(true);
   };
 
-  // 1. Ongoing secure WebRTC Voice/Video call frame
-  if (activeCall) {
-    return (
-      <WebRTCCalling
-        contactName={activeCall.name}
-        contactAvatar={activeCall.avatar}
-        isVideo={activeCall.isVideo}
-        onCallEnd={handleEndCall}
-      />
-    );
-  }
-
-  // 2. Unlocked primary private messaging dashboard
-  if (isRevealed && currentUser) {
-    return (
-      <div className={`${isLightTheme ? 'light-mode' : 'dark-mode'} h-[100dvh] w-screen overflow-hidden relative`}>
-        {/* Real-time WebRTC incoming call ringer overlay */}
-        {incomingCall && (
-          <div className="fixed inset-0 bg-black/90 flex flex-col items-center justify-center p-4 z-[99999] backdrop-blur-md animate-fade-in text-white select-none">
-            <div className="w-full max-w-sm text-center space-y-8 animate-scale-up">
-              <div className="relative inline-block">
-                {incomingCall.callerAvatar ? (
-                  <img
-                    referrerPolicy="no-referrer"
-                    src={incomingCall.callerAvatar}
-                    className="w-24 h-24 rounded-full mx-auto object-cover border-4 border-indigo-600 animate-pulse shadow-2xl"
-                    alt={incomingCall.callerName}
-                  />
-                ) : (
-                  <div className="w-24 h-24 rounded-full mx-auto bg-indigo-900 border-4 border-indigo-600 flex items-center justify-center text-2xl font-bold animate-pulse shadow-2xl">
-                    {incomingCall.callerName.charAt(0)}
-                  </div>
-                )}
-                <div className="absolute -bottom-1 -right-1 bg-rose-500 text-[10px] uppercase font-bold tracking-widest px-2.5 py-1 text-white rounded-full animate-bounce">
-                  Ringing
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h3 className="text-xl font-extrabold tracking-tight">{incomingCall.callerName}</h3>
-                <p className="text-xs text-[#2481cc] font-mono tracking-wider uppercase">
-                  Incoming {incomingCall.isVideo ? 'Secure Video Session' : 'Encrypted Voice Call'}
-                </p>
-              </div>
-
-              <div className="flex items-center justify-center gap-6 pt-4">
-                <button
-                  onClick={handleRejectIncomingCall}
-                  className="w-16 h-16 rounded-full bg-rose-600 hover:bg-rose-500 flex items-center justify-center text-white cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-lg"
-                  title="Decline Call"
-                >
-                  <PhoneOff className="w-6 h-6" />
-                </button>
-
-                <button
-                  onClick={handleAcceptIncomingCall}
-                  className="w-16 h-16 rounded-full bg-emerald-600 hover:bg-emerald-500 flex items-center justify-center text-white cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-lg animate-pulse"
-                  title="Accept Call"
-                >
-                  <Phone className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <IntergramMessenger
-          user={currentUser}
-          gmailToken={gmailToken}
-          onLogout={handleLogout}
-          onLock={() => setIsRevealed(false)} // Safe conceal
-          onStartCall={handleStartCall}
-          isLightTheme={isLightTheme}
-          setIsLightTheme={setIsLightTheme}
-          newlyPairedChatId={newlyPairedChatId}
-          clearNewlyPairedChatId={() => setNewlyPairedChatId(null)}
-        />
-      </div>
-    );
-  }
-
-  // 3. Disguised Front News Game Hub Applet
   return (
-    <div className={`min-h-screen flex flex-col justify-between font-sans relative transition-colors duration-200 ${isLightTheme
-        ? 'bg-slate-50 text-slate-800'
-        : 'bg-slate-950 text-white'
-      }`}>
-
-      {/* Dynamic background highlights */}
-      <div className={`absolute inset-0 transition-opacity ${isLightTheme
-          ? 'bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.06),rgba(255,255,255,0))]'
-          : 'bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.12),rgba(255,255,255,0))]'
-        }`} />
-
-      {/* DISGUISED HEADER */}
-      <header className={`border-b relative z-10 p-4 transition-colors ${isLightTheme
-          ? 'border-slate-200 bg-white/85'
-          : 'border-slate-900 bg-slate-950/60'
-        } backdrop-blur-md`}>
-
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            <img src={logoImg} alt="Prix Logo" className="w-8 h-8 sm:w-10 sm:h-10 object-contain rounded-lg sm:rounded-xl select-none pointer-events-none" />
-            <div>
-              <span className={`font-black text-lg sm:text-xl transition-colors font-sans uppercase tracking-widest block ${isLightTheme ? 'text-slate-950' : 'text-white'
-                }`}>
-                prix
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* Theme switcher */}
-            <button
-              onClick={() => setIsLightTheme(!isLightTheme)}
-              className={`p-1.5 sm:p-2 rounded-xl border transition-colors cursor-pointer select-none ${isLightTheme
-                  ? 'border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  : 'border-slate-800 bg-slate-900 hover:bg-slate-850 text-slate-400'
-                }`}
-              title={isLightTheme ? "Switch to Encrypted Dark Theme" : "Switch to Ambient Light Theme"}
-            >
-              {isLightTheme ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
-            </button>
-
-            {/* Disguise Tabs Selector */}
-            <div className={`flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-xl border transition-colors ${isLightTheme ? 'bg-slate-100 border-slate-200' : 'bg-slate-900 border-slate-800'
-              }`}>
-              <button
-                onClick={() => setDisguiseTab('news')}
-                className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3.5 sm:py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none transition ${disguiseTab === 'news'
-                    ? (isLightTheme ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'bg-slate-800 text-white shadow-md')
-                    : (isLightTheme ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white')
-                  }`}
-                title="News Hunt"
-              >
-                <Newspaper className="w-3.5 h-3.5 text-red-500" />
-                <span className="hidden sm:inline">News Hunt</span>
-              </button>
-
-              <button
-                onClick={() => setDisguiseTab('game')}
-                className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3.5 sm:py-1.5 rounded-lg text-xs font-semibold cursor-pointer select-none transition ${disguiseTab === 'game'
-                    ? (isLightTheme ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'bg-slate-800 text-white shadow-md')
-                    : (isLightTheme ? 'text-slate-500 hover:text-slate-900' : 'text-slate-400 hover:text-white')
-                  }`}
-                title="Shift Games"
-              >
-                <Gamepad className="w-3.5 h-3.5 text-indigo-500" />
-                <span className="hidden sm:inline">Shift Games</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* DISGUISE MAIN FEED AREA */}
-      <main className="max-w-7xl mx-auto w-full px-4 py-8 relative z-10 flex-grow flex flex-col justify-center">
-
-        {inviteUid && (
-          <div className="max-w-md mx-auto w-full mb-6 p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2.5">
-              <Link className="w-4 h-4 text-indigo-400 animate-pulse shrink-0" />
-              <div>
-                <p className="text-xs font-bold text-white leading-tight">Cryptographic Invitation</p>
-                <p className="text-[10px] text-slate-400 mt-1">Unlock console to sync secure mesh node connection</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setShowLockpad(true)}
-              className="bg-indigo-600 hover:bg-indigo-550 text-white font-mono text-[9px] font-bold py-1.5 px-3 rounded-lg select-none cursor-pointer"
-            >
-              PAIR NODE
-            </button>
-          </div>
-        )}
-
-        {disguiseTab === 'news' ? (
-          <div className="space-y-6">
-            <DisguiseNews onSecretTrigger={triggerSecretMode} isLightTheme={isLightTheme} />
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <DisguiseGame onSecretTrigger={triggerSecretMode} isLightTheme={isLightTheme} />
-          </div>
-        )}
-      </main>
-
-      {/* FOOTER */}
-      <footer className={`border-t p-4 transition-colors text-center select-none ${isLightTheme ? 'border-slate-200 bg-slate-100/50' : 'border-slate-900 bg-slate-950'
-        }`}>
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3 text-[11px] text-slate-500 font-mono">
-          <span>&copy; {new Date().getFullYear()} Daily Echo Syndications Ltd. All rights reserved.</span>
-          <div className="flex gap-4 items-center">
-            <button className="hover:text-slate-350 cursor-pointer">Terms of Service</button>
-            <span>&bull;</span>
-            <button className="hover:text-slate-350 cursor-pointer">Symmetric Privacy Protocols</button>
-          </div>
-        </div>
-      </footer>
-
-      {/* DECRYPTION LOCKPAD COMPONENT */}
-      {showLockpad && (
-        <SecretLockpad
-          onUnlock={handleUnlock}
-          onCancel={() => setShowLockpad(false)}
-        />
-      )}
-
-      {/* Micro Floating Access button for seamless accessibility testing */}
-      <button
-        onClick={triggerSecretMode}
-        className="fixed bottom-4 right-4 z-40 bg-indigo-600 hover:bg-indigo-700 hover:ring-4 hover:ring-indigo-500/20 text-white p-3 rounded-full shadow-lg transition active:scale-95 cursor-pointer"
-        title="Access encrypted core panel"
-      >
-        <Lock className="w-4 h-4" />
-      </button>
-    </div>
+    <AppRoutes
+      disguiseTab={disguiseTab}
+      setDisguiseTab={setDisguiseTab}
+      isRevealed={isRevealed}
+      setIsRevealed={setIsRevealed}
+      showLockpad={showLockpad}
+      setShowLockpad={setShowLockpad}
+      isLightTheme={isLightTheme}
+      setIsLightTheme={setIsLightTheme}
+      currentUser={currentUser}
+      gmailToken={gmailToken}
+      newlyPairedChatId={newlyPairedChatId}
+      clearNewlyPairedChatId={() => setNewlyPairedChatId(null)}
+      activeCall={activeCall}
+      incomingCall={incomingCall}
+      handleRejectIncomingCall={handleRejectIncomingCall}
+      handleAcceptIncomingCall={handleAcceptIncomingCall}
+      handleEndCall={handleEndCall}
+      handleStartCall={handleStartCall}
+      handleUnlock={handleUnlock}
+      handleLogout={handleLogout}
+      triggerSecretMode={triggerSecretMode}
+      inviteUid={inviteUid}
+    />
   );
 }

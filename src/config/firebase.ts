@@ -22,7 +22,7 @@ import {
   DocumentReference,
   DocumentSnapshot
 } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+import firebaseConfig from '../../config/firebase-applet-config.json';
 
 // Safe lazy initialization of Firebase App
 let app;
@@ -189,6 +189,8 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 export const getAccessToken = (): string | null => {
   return cachedAccessToken;
 };
+
+export const runAutoSignIn = async () => {}; // Stub to prevent warnings
 
 export const setAccessToken = (token: string | null) => {
   cachedAccessToken = token;

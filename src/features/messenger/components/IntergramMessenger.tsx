@@ -39,7 +39,7 @@ import {
   Share2
 } from 'lucide-react';
 
-import { db } from '../firebase';
+import { db } from '../../../config/firebase';
 import {
   collection,
   onSnapshot,
@@ -54,11 +54,11 @@ import {
   setLogLevel
 } from 'firebase/firestore';
 
-import logoImg from '../logo.png';
-import animeChatBg from '../assets/anime_chat_bg.png';
-import animeDarkBg from '../assets/anime_dark_bg.png';
+import logoImg from '../../../assets/logo.png';
+import animeChatBg from '../../../assets/anime_chat_bg.png';
+import animeDarkBg from '../../../assets/anime_dark_bg.png';
 
-import { ChatSession, Message, Contact } from '../types';
+import { ChatSession, Message, Contact } from '../../../types';
 
 // Cryptographic helpers
 async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {

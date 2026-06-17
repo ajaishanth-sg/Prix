@@ -9,7 +9,7 @@ import {
   Database, Video, Mic, CheckCircle2, ChevronRight, Activity, Cpu, Phone
 } from 'lucide-react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db, googleSignIn, auth } from '../firebase';
+import { db, googleSignIn, auth } from '../../config/firebase';
 import { User, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 
 interface SecretLockpadProps {

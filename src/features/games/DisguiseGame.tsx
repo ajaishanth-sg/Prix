@@ -8,7 +8,7 @@ import { Trophy, Swords, Grid, Gamepad, Sparkles, User, Award, Shield, Timer, Ch
 import ChessGame from './ChessGame';
 import SudokuGame from './SudokuGame';
 import MahjongGame from './MahjongGame';
-import OpenGamesExplorer from './OpenGamesExplorer';
+import OpenGamesExplorer from '../opengames/OpenGamesExplorer';
 
 interface DisguiseGameProps {
   onSecretTrigger: () => void;

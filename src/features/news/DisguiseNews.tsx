@@ -10,7 +10,7 @@ import {
   Terminal, Code, Database, Globe, Sliders, Play, FileJson, Download,
   Cpu, Award, MessageSquare, BarChart3, Layers, BookOpen, AlertCircle, CloudSun
 } from 'lucide-react';
-import { NewsArticle } from '../types';
+import { NewsArticle } from '../../types';
 
 interface DisguiseNewsProps {
   onSecretTrigger: () => void;

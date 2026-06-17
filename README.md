@@ -22,7 +22,7 @@
 When a user activates a hidden trigger (such as the floating lock icon or a secret key sequence in the news portal) and enters the correct PIN or credentials, the interface decrypts to reveal **IntergramMessenger**:
 - **Real-Time Direct Messaging**: Handled via Firebase Firestore for instantaneous communication.
 - **WebRTC Voice & Video Calling**: Features real-time call invites, ringing states, and audio/video WebRTC connection hooks.
-- **Cryptographic Mesh Link/Pairing**: Generates bidirectional connection invite links. These can be transmitted via **SMTP email** or **simulated SMS** using the Python backend (supporting custom SMTP configurations).
+- **Cryptographic Mesh Link/Pairing**: Generates bidirectional connection invite links. These can be transmitted via **SMTP email** or **simulated SMS** using the Django backend (supporting custom SMTP configurations).
 - **Security Protocols**: Locally managed cryptographic contexts and secure key integrations.
 
 ---
@@ -36,15 +36,23 @@ When a user activates a hidden trigger (such as the floating lock icon or a secr
 - **Icons**: [Lucide React](https://lucide.dev/) for premium vector iconography
 - **Animation**: [Motion](https://motion.dev/) (Framer Motion) for fluid UI state transitions and overlays
 
-### Backend Services (Python Backend)
-- **Framework**: [FastAPI](https://fastapi.tiangolo.com/) (Python 3.13)
-- **Server**: [Uvicorn](https://www.uvicorn.org/) (Asynchronous Server Gateway Interface)
+### Backend Services (Django + PostgreSQL)
+- **Framework**: [Django 6.0](https://www.djangoproject.com/) (Python 3.13)
+- **Database**: [PostgreSQL](https://www.postgresql.org/) — local instance, database: `prix`
+- **ORM**: Django Models — `UserProfile`, `Contact`, `ChatSession`, `ChatMessage`, `NewsCache`, `InviteLog`
+- **CORS**: [`django-cors-headers`](https://pypi.org/project/django-cors-headers/) for cross-origin API access
 - **AI Integration**: [Google GenAI SDK](https://github.com/google/generative-ai-python) (`google-genai` library) for content generation with **Google Search Grounding**
 - **Transports**: `smtplib` and `email` for pairing invitations via SMTP
+- **Database Adapter**: [`psycopg2-binary`](https://pypi.org/project/psycopg2-binary/) for PostgreSQL connectivity
+
+### Real-Time & Cloud Services
+- **Firebase Firestore**: Real-time chat message synchronization
+- **Firebase Auth**: Google Sign-In + phone OTP authentication
+- **WebRTC**: Peer-to-peer voice and video calling
 
 ### Dev Server & Proxy (Node.js)
 - **Framework**: [Express.js](https://expressjs.com/) (Vite Dev Server integration middleware)
-- **Proxy**: Natively forwards all `/api/*` endpoints to the FastAPI Python server at `http://127.0.0.1:8000` using standard `fetch` APIs.
+- **Proxy**: Natively forwards all `/api/*` endpoints to the Django Python server at `http://127.0.0.1:8001` using standard `fetch` APIs.
 
 ---
 
@@ -68,9 +76,27 @@ project-root/
 ├── server/                       # Express server proxy directory
 │   └── server.ts                 # Dev server for Vite and backend routing proxy
 │
-├── backend/                      # Python backend service folder
-│   ├── main.py                   # FastAPI server serving API endpoints
-│   └── requirements.txt          # Python dependencies
+├── backend/                      # Django backend service folder
+│   ├── manage.py                 # Django management CLI
+│   ├── create_db.py              # PostgreSQL database bootstrap script
+│   ├── main.py                   # Legacy FastAPI server (deprecated, kept for reference)
+│   ├── requirements.txt          # Python dependencies
+│   │
+│   ├── prix_backend/             # Django project configuration
+│   │   ├── __init__.py
+│   │   ├── settings.py           # Django settings (PostgreSQL, CORS, apps)
+│   │   ├── urls.py               # Root URL routing (admin + api)
+│   │   ├── wsgi.py               # WSGI application entry point
+│   │   └── asgi.py               # ASGI application entry point
+│   │
+│   └── api/                      # Django API application
+│       ├── __init__.py
+│       ├── models.py             # ORM models (UserProfile, ChatSession, etc.)
+│       ├── views.py              # API view functions (news, auth, chat, etc.)
+│       ├── urls.py               # API URL routing
+│       ├── admin.py              # Django admin registrations
+│       └── migrations/           # Database migration files
+│           └── 0001_initial.py   # Initial schema migration
 │
 ├── src/                          # Frontend source code
     ├── main.tsx                  # Client entry point
@@ -118,29 +144,70 @@ project-root/
 
 ---
 
-## 🔌 Python Backend API Endpoints
+## 🗄️ Database Schema (PostgreSQL)
 
-The FastAPI backend in `backend/main.py` exposes the following endpoints:
+The Django backend uses PostgreSQL with the following models:
 
-1. **`GET /api/news`**: 
-   - Attempts to scrape and parse the live **Times of India RSS feed** using regex.
-   - If RSS is unavailable, it queries the **Gemini API** (`gemini-2.0-flash`) with the **Google Search tool** enabled to generate a structured JSON list of recent news complete with sentiment scores, and entities.
-   - Includes a **3-minute cache TTL** to prevent 429 quota exhaustion.
-   - Leverages a **circuit-breaker** cooldown period of 60 seconds if rate-limiting is detected, automatically serving high-fidelity local fallback news.
+| Model | Table | Description |
+|-------|-------|-------------|
+| `UserProfile` | `user_profiles` | Extended user profile (display name, avatar, permissions) linked to Django's `auth_user` |
+| `Contact` | `contacts` | Contact relationships between users |
+| `ChatSession` | `chat_sessions` | Conversation threads with platform, type, and encryption key |
+| `ChatMessage` | `chat_messages` | Individual messages with support for files, polls, checklists, location, and wallet transfers |
+| `NewsCache` | `news_cache` | Server-side persistent news cache (JSON articles by query key) |
+| `InviteLog` | `invite_logs` | Audit log of pairing invitations sent via email/SMS |
 
-2. **`POST /api/send-invite`**:
-   - Accepts pairing requests detailing the connection link and destination contact address.
-   - Dispatches a secure HTML formatted email containing the matchmaking connection link.
-   - Uses custom SMTP if defined in `.env`.
+---
 
-3. **`GET /api/portal-proxy`**:
-   - A CORS-bypass proxy designed to fetch articles directly from news sources and serve them inline by injecting a `<base>` tag.
+## 🔌 Django Backend API Endpoints
 
-4. **`GET /api/toi-live`**:
-   - Resolves YouTube video IDs for the live Times Now broadcast stream.
+The Django backend in `backend/api/views.py` exposes the following endpoints (all prefixed with `/api/`):
 
-5. **`GET /api/opengames/games` | `search` | `stats`**:
-   - Proxy endpoints that aggregate lists and statistics from `opengames.dev` with local fallbacks.
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/signup/` | Register new user with email/password + profile data |
+| `POST` | `/api/login/` | Authenticate user and return profile |
+| `POST` | `/api/logout/` | Mark user as offline |
+
+### Users & Contacts
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/users/` | List all registered users for contact directory |
+| `GET` | `/api/contacts/?userId=` | List contacts for a specific user |
+| `POST` | `/api/contacts/` | Add a new contact |
+
+### Chat
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/chat/sessions/?userId=` | List chat sessions for a user |
+| `POST` | `/api/chat/sessions/` | Create a new chat session |
+| `GET` | `/api/chat/messages/?sessionId=` | List messages in a session |
+| `POST` | `/api/chat/messages/` | Send a new message |
+
+### News & Content
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/news/` | Fetch news (TOI RSS → Gemini Search → fallback) with 3-min cache + circuit breaker |
+| `GET` | `/api/portal-proxy/?url=` | CORS-bypass proxy for inline article viewing |
+| `GET` | `/api/toi-live/` | Resolve YouTube video ID for live Times Now broadcast |
+
+### Invitations
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/send-invite/` | Send pairing invitation via SMTP email or simulated SMS |
+
+### OpenGames Proxy
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/opengames/games/` | Proxy for OpenGames game listing |
+| `GET` | `/api/opengames/search/` | Proxy for OpenGames search |
+| `GET` | `/api/opengames/stats/` | Proxy for OpenGames statistics |
+
+### Utility
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/health/` | Health check (returns server status + timestamp) |
 
 ---
 
@@ -149,6 +216,7 @@ The FastAPI backend in `backend/main.py` exposes the following endpoints:
 ### Prerequisites
 - [Node.js](https://nodejs.org/) (v18+ recommended)
 - [Python 3.13+](https://www.python.org/)
+- [PostgreSQL](https://www.postgresql.org/) (v15+ recommended, running locally on port 5432)
 - Gemini API Key (from [Google AI Studio](https://aistudio.google.com/))
 
 ### Configuration
@@ -159,6 +227,13 @@ The FastAPI backend in `backend/main.py` exposes the following endpoints:
 
    # Server Port
    PORT=3000
+
+   # PostgreSQL Database
+   DB_NAME=prix
+   DB_USER=postgres
+   DB_PASSWORD=Admin@123
+   DB_HOST=localhost
+   DB_PORT=5432
 
    # Optional: Mail SMTP Setup (Falls back to Console Logs if empty)
    SMTP_HOST=smtp.gmail.com
@@ -182,13 +257,49 @@ The FastAPI backend in `backend/main.py` exposes the following endpoints:
    pip install -r backend/requirements.txt
    ```
 
-3. **Start the Python Backend**:
+3. **Bootstrap the PostgreSQL Database**:
    ```bash
-   uvicorn backend.main:app --reload --port 8000
+   python backend/create_db.py
    ```
 
-4. **Start the Frontend Dev Server**:
+4. **Run Django Migrations**:
+   ```bash
+   cd backend
+   python manage.py migrate
+   ```
+
+5. **Start the Django Backend** (port 8001):
+   ```bash
+   cd backend
+   python manage.py runserver 0.0.0.0:8001
+   ```
+
+6. **Start the Frontend Dev Server** (port 3000):
    ```bash
    npm run dev
    ```
    *The client page will be accessible at [http://localhost:3000](http://localhost:3000).*
+
+### Django Admin
+To access the Django admin panel at `http://localhost:8001/admin/`:
+```bash
+cd backend
+python manage.py createsuperuser
+```
+
+---
+
+## 📋 Future Enhancements & Missing Features
+
+The following features are identified for future development:
+
+| Feature | Status | Priority |
+|---------|--------|----------|
+| JWT / Token-based auth for API endpoints | 🔲 Planned | High |
+| WebSocket real-time chat via Django Channels | 🔲 Planned | High |
+| Full frontend migration from Firebase Auth to Django Auth | 🔲 Planned | Medium |
+| User avatar upload to server (file storage) | 🔲 Planned | Medium |
+| Chat message search & pagination | 🔲 Planned | Medium |
+| Push notifications for new messages | 🔲 Planned | Low |
+| Rate limiting middleware for API security | 🔲 Planned | Low |
+| Production deployment with Gunicorn + Nginx | 🔲 Planned | Low |

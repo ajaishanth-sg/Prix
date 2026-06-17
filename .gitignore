@@ -1,8 +1,41 @@
+# Node
 node_modules/
 build/
 dist/
 coverage/
+
+# OS
 .DS_Store
+
+# Logs
 *.log
+
+# Environment
 .env*
 !.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+.Python
+env/
+venv/
+.venv/
+
+# Django
+backend/db.sqlite3
+backend/staticfiles/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Scratch / workspace
+scratch/
+metadata.json

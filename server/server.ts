@@ -9,7 +9,7 @@ dotenv.config();
 async function startServer() {
   const app = express();
   const PORT = parseInt(process.env.PORT || "3000", 10);
-  const PYTHON_BACKEND = "http://127.0.0.1:8000";
+  const PYTHON_BACKEND = "http://127.0.0.1:8001";
   const httpServer = http.createServer(app);
 
   app.use(express.json());
